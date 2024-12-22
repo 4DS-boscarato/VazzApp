@@ -26,7 +26,7 @@ public class MultiServer {
 
                         try {
                             while(true) {
-                                (new ChatServer(serverSocket.accept())).start();
+                                new ChatServer(serverSocket.accept());
                             }
                         } catch (Throwable var6) {
                             try {

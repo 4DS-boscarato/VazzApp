@@ -7,16 +7,17 @@ import java.io.PrintWriter;
 import java.net.Socket;
 
 public class ClientGUI {
-    private static final String SERVER_ADDRESS = "localhost";
-    private static final int SERVER_PORT = 777;
+    private JFrame frame;
+    private JTextArea chatArea;
+    private JTextField messageField;
+    private JTextField portField;
+    private JTextField hostField;
+    private JButton connectButton;
+    private JButton sendButton;
 
     private Socket socket;
     private PrintWriter out;
     private BufferedReader in;
-    private JFrame frame;
-    private JTextArea chatArea;
-    private JTextField messageField;
-    private JButton sendButton;
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(ClientGUI::new);
@@ -24,13 +25,12 @@ public class ClientGUI {
 
     public ClientGUI() {
         initializeGUI();
-        connectToServer();
     }
 
     private void initializeGUI() {
         frame = new JFrame("Chat Client");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.setSize(400, 500);
+        frame.setSize(500, 500);
 
         chatArea = new JTextArea();
         chatArea.setEditable(false);
@@ -49,6 +49,20 @@ public class ClientGUI {
         inputPanel.add(messageField, BorderLayout.CENTER);
         inputPanel.add(sendButton, BorderLayout.EAST);
 
+        portField = new JTextField("777", 5); // Default port is 777
+        hostField = new JTextField("localhost", 10);
+
+        connectButton = new JButton("Connect");
+        connectButton.addActionListener(e -> connectToServer());
+
+        JPanel topPanel = new JPanel();
+        topPanel.add(new JLabel("Host:"));
+        topPanel.add(hostField);
+        topPanel.add(new JLabel("Port:"));
+        topPanel.add(portField);
+        topPanel.add(connectButton);
+
+        frame.add(topPanel, BorderLayout.NORTH);
         frame.add(scrollPane, BorderLayout.CENTER);
         frame.add(inputPanel, BorderLayout.SOUTH);
 
@@ -57,7 +71,10 @@ public class ClientGUI {
 
     private void connectToServer() {
         try {
-            socket = new Socket(SERVER_ADDRESS, SERVER_PORT);
+            int port = Integer.parseInt(portField.getText().trim());
+            String host = hostField.getText().trim();
+
+            socket = new Socket(host, port);
             out = new PrintWriter(socket.getOutputStream(), true);
             in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 
@@ -66,16 +83,18 @@ public class ClientGUI {
             String username = JOptionPane.showInputDialog(frame, "Enter your username:", "Login", JOptionPane.PLAIN_MESSAGE);
             if (username == null || username.trim().isEmpty()) {
                 JOptionPane.showMessageDialog(frame, "Username is required to join the chat.", "Error", JOptionPane.ERROR_MESSAGE);
-                System.exit(0);
+                return;
             }
 
             out.println(username);
             messageField.setEnabled(true);
             sendButton.setEnabled(true);
+            connectButton.setEnabled(false);
 
-        } catch (IOException e) {
-            JOptionPane.showMessageDialog(frame, "Unable to connect to the server.", "Connection Error", JOptionPane.ERROR_MESSAGE);
-            System.exit(1);
+            hostField.setEnabled(false);
+            portField.setEnabled(false);
+        } catch (IOException | NumberFormatException e) {
+            JOptionPane.showMessageDialog(frame, "Unable to connect to the server: " + e.getMessage(), "Connection Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -94,8 +113,7 @@ public class ClientGUI {
                 chatArea.append(message + "\n");
             }
         } catch (IOException e) {
-            JOptionPane.showMessageDialog(frame, "Connection to the server lost.", "Error", JOptionPane.ERROR_MESSAGE);
-            System.exit(1);
+            JOptionPane.showMessageDialog(frame, "Connection lost.", "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 }

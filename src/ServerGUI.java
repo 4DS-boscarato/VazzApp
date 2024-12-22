@@ -7,11 +7,11 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class ServerGUI {
-    private static final int SERVER_PORT = 777;
     private JFrame frame;
     private JTextArea logArea;
     private JButton startButton;
     private JButton stopButton;
+    private JTextField portField;
     private ServerSocket serverSocket;
     private boolean isRunning = false;
 
@@ -43,12 +43,16 @@ public class ServerGUI {
         startButton.addActionListener(e -> startServer());
         stopButton.addActionListener(e -> stopServer());
 
-        JPanel buttonPanel = new JPanel();
-        buttonPanel.add(startButton);
-        buttonPanel.add(stopButton);
+        portField = new JTextField("777", 5); // Default port is 777
 
+        JPanel topPanel = new JPanel();
+        topPanel.add(new JLabel("Port:"));
+        topPanel.add(portField);
+        topPanel.add(startButton);
+        topPanel.add(stopButton);
+
+        frame.add(topPanel, BorderLayout.NORTH);
         frame.add(scrollPane, BorderLayout.CENTER);
-        frame.add(buttonPanel, BorderLayout.SOUTH);
 
         frame.setVisible(true);
     }
@@ -56,9 +60,10 @@ public class ServerGUI {
     private void startServer() {
         new Thread(() -> {
             try {
-                serverSocket = new ServerSocket(SERVER_PORT);
+                int port = Integer.parseInt(portField.getText().trim());
+                serverSocket = new ServerSocket(port);
                 isRunning = true;
-                appendLog("Server started on port " + SERVER_PORT);
+                appendLog("Server started on port " + port);
                 startButton.setEnabled(false);
                 stopButton.setEnabled(true);
 
@@ -68,6 +73,8 @@ public class ServerGUI {
                 }
             } catch (IOException e) {
                 appendLog("Error starting server: " + e.getMessage());
+            } catch (NumberFormatException e) {
+                appendLog("Invalid port number.");
             }
         }).start();
     }
@@ -90,7 +97,7 @@ public class ServerGUI {
         try (BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
              PrintWriter out = new PrintWriter(socket.getOutputStream(), true)) {
 
-            appendLog("Client connected: " + socket.getRemoteSocketAddress());
+            appendLog("\nClient connected: " + socket.getRemoteSocketAddress());
             out.println("Enter your username:");
 
             String username;
@@ -127,9 +134,7 @@ public class ServerGUI {
             appendLog("Client disconnected: " + e.getMessage());
         } finally {
             synchronized (partecipanti) {
-                if (socket != null) {
-                    partecipanti.values().removeIf(out -> out.checkError());
-                }
+                partecipanti.values().removeIf(out -> out.checkError());
             }
         }
     }
