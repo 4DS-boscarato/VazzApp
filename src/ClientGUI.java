@@ -1,7 +1,11 @@
+// Aggiornamento di ClientGUI.java per supportare il trasferimento di file
+
 import javax.swing.*;
 import java.awt.*;
-import java.util.HashMap;
-import java.util.Map;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.io.*;
+import java.net.Socket;
 
 public class ClientGUI {
     private JFrame frame;
@@ -11,182 +15,56 @@ public class ClientGUI {
     private JTextField hostField;
     private JButton connectButton;
     private JButton sendButton;
+    private JButton disconnectButton;
+    private JButton sendFileButton; // Pulsante per inviare file
 
-    private static final Map<String, String> userDatabase = new HashMap<>(); // Mappa per memorizzare utenti
+    private Socket socket;
+    private PrintWriter out;
+    private BufferedReader in;
 
     public static void main(String[] args) {
-        SwingUtilities.invokeLater(ClientGUI::new); // Punto d'ingresso dell'applicazione
+        SwingUtilities.invokeLater(ClientGUI::new);
     }
 
     public ClientGUI() {
-        initializeFrame();
-        showHomePage();
+        initializeGUI();
     }
 
-    private void initializeFrame() {
+    private void initializeGUI() {
         frame = new JFrame("Chat Client");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.setSize(500, 500);
-        frame.setLayout(new BorderLayout());
-
-        // Creazione del menu
-        JMenuBar menuBar = new JMenuBar();
-        JMenu menu = new JMenu("wgazione");
-
-        JMenuItem homeItem = new JMenuItem("Homepage");
-        homeItem.addActionListener(e -> showHomePage());
-
-        JMenuItem loginItem = new JMenuItem("Accedi");
-        loginItem.addActionListener(e -> showLoginPage());
-
-        JMenuItem registerItem = new JMenuItem("Registrati");
-        registerItem.addActionListener(e -> showRegistrationPage());
-
-        JMenuItem exitItem = new JMenuItem("Esci");
-        exitItem.addActionListener(e -> System.exit(0));
-
-        menu.add(homeItem);
-        menu.add(loginItem);
-        menu.add(registerItem);
-        menu.add(exitItem);
-
-        menuBar.add(menu);
-        frame.setJMenuBar(menuBar);
-
-        // Rendi visibile il frame
-        frame.setVisible(true);
-    }
-
-    private void showHomePage() {
-        frame.getContentPane().removeAll();
-        frame.setTitle("Chat Client - Homepage");
-
-        // Logo e titolo
-        JLabel logo = new JLabel("LOGO", SwingConstants.CENTER);
-        logo.setFont(new Font("Arial", Font.BOLD, 48));
-
-        JLabel title = new JLabel("Benvenuto in Vazzapp", SwingConstants.CENTER);
-        title.setFont(new Font("Arial", Font.BOLD, 30));
-
-        // Pulsanti per accedere o registrarsi
-        JButton loginButton = new JButton("Accedi");
-        loginButton.addActionListener(e -> showLoginPage());
-
-        JButton registerButton = new JButton("Registrati");
-        registerButton.addActionListener(e -> showRegistrationPage());
-
-        JPanel buttonPanel = new JPanel();
-        buttonPanel.setLayout(new GridLayout(2, 1, 10, 10));
-        buttonPanel.add(loginButton);
-        buttonPanel.add(registerButton);
-
-        JPanel contentPanel = new JPanel();
-        contentPanel.setLayout(new BorderLayout());
-        contentPanel.add(logo, BorderLayout.NORTH);
-        contentPanel.add(title, BorderLayout.CENTER);
-        contentPanel.add(buttonPanel, BorderLayout.SOUTH);
-
-        frame.add(contentPanel, BorderLayout.CENTER);
-        frame.revalidate();
-        frame.repaint();
-    }
-
-    private void showLoginPage() {
-        frame.getContentPane().removeAll();
-        frame.setTitle("Chat Client - Login");
-
-        JLabel userLabel = new JLabel("Username:");
-        JTextField usernameField = new JTextField(15);
-        JLabel passLabel = new JLabel("Password:");
-        JPasswordField passwordField = new JPasswordField(15);
-        JButton loginButton = new JButton("Accedi");
-
-        loginButton.addActionListener(e -> {
-            String username = usernameField.getText().trim();
-            String password = new String(passwordField.getPassword()).trim();
-
-            if (authenticateUser(username, password)) {
-                JOptionPane.showMessageDialog(frame, "Accesso effettuato con successo!", "Successo", JOptionPane.INFORMATION_MESSAGE);
-                showChatPage(username);
-            } else {
-                JOptionPane.showMessageDialog(frame, "Credenziali non valide.", "Errore", JOptionPane.ERROR_MESSAGE);
-            }
-        });
-
-        JPanel panel = new JPanel();
-        panel.setLayout(new GridLayout(3, 2));
-        panel.add(userLabel);
-        panel.add(usernameField);
-        panel.add(passLabel);
-        panel.add(passwordField);
-        panel.add(new JLabel());
-        panel.add(loginButton);
-
-        frame.add(panel);
-        frame.revalidate();
-        frame.repaint();
-    }
-
-    private void showRegistrationPage() {
-        frame.getContentPane().removeAll();
-        frame.setTitle("Chat Client - Registrazione");
-
-        JLabel userLabel = new JLabel("Username:");
-        JTextField usernameField = new JTextField(15);
-        JLabel passLabel = new JLabel("Password:");
-        JPasswordField passwordField = new JPasswordField(15);
-        JButton registerButton = new JButton("Registrati");
-
-        registerButton.addActionListener(e -> {
-            String username = usernameField.getText().trim();
-            String password = new String(passwordField.getPassword()).trim();
-
-            if (username.isEmpty() || password.isEmpty()) {
-                JOptionPane.showMessageDialog(frame, "Compila tutti i campi.", "Errore", JOptionPane.ERROR_MESSAGE);
-            } else if (registerUser(username, password)) {
-                JOptionPane.showMessageDialog(frame, "Registrazione completata! Ora puoi accedere.", "Successo", JOptionPane.INFORMATION_MESSAGE);
-                showLoginPage();
-            } else {
-                JOptionPane.showMessageDialog(frame, "Username già esistente.", "Errore", JOptionPane.ERROR_MESSAGE);
-            }
-        });
-
-        JPanel panel = new JPanel();
-        panel.setLayout(new GridLayout(3, 2));
-        panel.add(userLabel);
-        panel.add(usernameField);
-        panel.add(passLabel);
-        panel.add(passwordField);
-        panel.add(new JLabel());
-        panel.add(registerButton);
-
-        frame.add(panel);
-        frame.revalidate();
-        frame.repaint();
-    }
-
-    private void showChatPage(String username) {
-        frame.getContentPane().removeAll();
-        frame.setTitle("Chat Client - Chat (" + username + ")");
+        frame.setSize(700, 500);
 
         chatArea = new JTextArea();
         chatArea.setEditable(false);
         JScrollPane scrollPane = new JScrollPane(chatArea);
 
         messageField = new JTextField();
-        sendButton = new JButton("Send");
+        messageField.setEnabled(false);
 
-        sendButton.addActionListener(e -> sendMessage(username));
-        messageField.addActionListener(e -> sendMessage(username));
+        sendButton = new JButton("Send");
+        sendButton.setEnabled(false);
+
+        disconnectButton = new JButton("Disconnect");
+        disconnectButton.setEnabled(false);
+
+        sendFileButton = new JButton("Send File"); // Inizializzazione pulsante
+        sendFileButton.setEnabled(false);
+
+        sendButton.addActionListener(e -> sendMessage());
+        messageField.addActionListener(e -> sendMessage());
+        disconnectButton.addActionListener(e -> disconnectFromServer());
+        sendFileButton.addActionListener(e -> sendFile()); // Azione per inviare file
 
         JPanel inputPanel = new JPanel(new BorderLayout());
         inputPanel.add(messageField, BorderLayout.CENTER);
         inputPanel.add(sendButton, BorderLayout.EAST);
 
-        portField = new JTextField("777", 5);
+        portField = new JTextField("7777", 5);
         hostField = new JTextField("localhost", 10);
+
         connectButton = new JButton("Connect");
-        connectButton.addActionListener(e -> connectToServer(username));
+        connectButton.addActionListener(e -> connectToServer());
 
         JPanel topPanel = new JPanel();
         topPanel.add(new JLabel("Host:"));
@@ -194,37 +72,143 @@ public class ClientGUI {
         topPanel.add(new JLabel("Port:"));
         topPanel.add(portField);
         topPanel.add(connectButton);
+        topPanel.add(disconnectButton);
+        topPanel.add(sendFileButton);
 
         frame.add(topPanel, BorderLayout.NORTH);
         frame.add(scrollPane, BorderLayout.CENTER);
         frame.add(inputPanel, BorderLayout.SOUTH);
 
-        frame.revalidate();
-        frame.repaint();
+        frame.setVisible(true);
     }
 
-    private boolean registerUser(String username, String password) {
-        if (userDatabase.containsKey(username)) {
-            return false; // Username già esistente
+    private void connectToServer() {
+        try {
+            int port = Integer.parseInt(portField.getText().trim());
+            String host = hostField.getText().trim();
+
+            socket = new Socket(host, port);
+            out = new PrintWriter(socket.getOutputStream(), true);
+            in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+
+            new Thread(this::listenForMessages).start();
+
+            String username = JOptionPane.showInputDialog(frame, "Enter your username:", "Login", JOptionPane.PLAIN_MESSAGE);
+            if (username == null || username.trim().isEmpty()) {
+                JOptionPane.showMessageDialog(frame, "Username is required to join the chat.", "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            out.println(username);
+            messageField.setEnabled(true);
+            sendButton.setEnabled(true);
+            disconnectButton.setEnabled(true);
+            connectButton.setEnabled(false);
+            sendFileButton.setEnabled(true);
+
+            hostField.setEnabled(false);
+            portField.setEnabled(false);
+        } catch (IOException | NumberFormatException e) {
+            JOptionPane.showMessageDialog(frame, "Unable to connect to the server: " + e.getMessage(), "Connection Error", JOptionPane.ERROR_MESSAGE);
         }
-        userDatabase.put(username, password);
-        return true;
     }
 
-    private boolean authenticateUser(String username, String password) {
-        return userDatabase.containsKey(username) && userDatabase.get(username).equals(password);
-    }
+    private void sendMessage() {
+        try {
+            String message = messageField.getText().trim();
+            if (message.isEmpty()) {
+                JOptionPane.showMessageDialog(frame, "Message cannot be empty.", "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
 
-    private void connectToServer(String username) {
-        // Logica per connettersi al server
-        JOptionPane.showMessageDialog(frame, "Connessione simulata per: " + username);
-    }
+            if (message.length() > 200) {
+                JOptionPane.showMessageDialog(frame, "Message too long (max 200 characters).", "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
 
-    private void sendMessage(String username) {
-        String message = messageField.getText().trim();
-        if (!message.isEmpty()) {
-            chatArea.append(username + ": " + message + "\n");
+            out.println(message);
             messageField.setText("");
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(frame, "Error sending message: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void sendFile() {
+        JFileChooser fileChooser = new JFileChooser();
+        int returnValue = fileChooser.showOpenDialog(frame);
+        if (returnValue == JFileChooser.APPROVE_OPTION) {
+            File file = fileChooser.getSelectedFile();
+            try (BufferedInputStream fileIn = new BufferedInputStream(new FileInputStream(file));
+                 OutputStream socketOut = socket.getOutputStream()) {
+
+                out.println("FILE:" + file.getName()); // Invia intestazione file
+
+                byte[] buffer = new byte[4096];
+                int bytesRead;
+                while ((bytesRead = fileIn.read(buffer)) != -1) {
+                    socketOut.write(buffer, 0, bytesRead);
+                }
+                socketOut.flush();
+                chatArea.append("File sent: " + file.getName() + "\n");
+            } catch (IOException e) {
+                JOptionPane.showMessageDialog(frame, "Error sending file: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
+
+    private void listenForMessages() {
+        try {
+            String message;
+            while ((message = in.readLine()) != null) {
+                if (message.startsWith("FILE:")) {
+                    receiveFile(message.substring(5));
+                } else {
+                    chatArea.append(message + "\n");
+                }
+            }
+        } catch (IOException e) {
+            JOptionPane.showMessageDialog(frame, "Connection lost.", "Error", JOptionPane.ERROR_MESSAGE);
+            disconnectFromServer();
+        }
+    }
+
+    private void receiveFile(String fileName) {
+        try (BufferedOutputStream fileOut = new BufferedOutputStream(new FileOutputStream(fileName));
+             InputStream socketIn = socket.getInputStream()) {
+
+            byte[] buffer = new byte[4096];
+            int bytesRead;
+            while ((bytesRead = socketIn.read(buffer)) != -1) {
+                fileOut.write(buffer, 0, bytesRead);
+            }
+            fileOut.flush();
+            chatArea.append("File received: " + fileName + "\n");
+        } catch (IOException e) {
+            JOptionPane.showMessageDialog(frame, "Error receiving file: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void disconnectFromServer() {
+        try {
+            if (socket != null && !socket.isClosed()) {
+                socket.close();
+            }
+            out = null;
+            in = null;
+            socket = null;
+
+            messageField.setEnabled(false);
+            sendButton.setEnabled(false);
+            disconnectButton.setEnabled(false);
+            connectButton.setEnabled(true);
+            sendFileButton.setEnabled(false);
+
+            hostField.setEnabled(true);
+            portField.setEnabled(true);
+
+            chatArea.append("Disconnected from server.\n");
+        } catch (IOException e) {
+            JOptionPane.showMessageDialog(frame, "Error disconnecting: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 }
