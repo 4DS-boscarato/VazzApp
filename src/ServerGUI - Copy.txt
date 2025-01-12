@@ -49,6 +49,7 @@ public class ServerGUI {
         JScrollPane scrollPaneUtentiDisconnessi = new JScrollPane(listaUtentiDisconnessi);
         scrollPaneUtentiDisconnessi.setBorder(BorderFactory.createTitledBorder("Utenti Disconnessi"));
 
+
         bottoneAvvio = new JButton("Avvia Server");
         bottoneFermo = new JButton("Ferma Server");
         bottoneFermo.setEnabled(false);
@@ -62,6 +63,7 @@ public class ServerGUI {
         pannelloSuperiore.add(campoPorta);
         pannelloSuperiore.add(bottoneAvvio);
         pannelloSuperiore.add(bottoneFermo);
+
 
         JPanel pannelloUtenti = new JPanel(new GridLayout(1, 2));
         pannelloUtenti.add(scrollPaneUtentiAttivi);
@@ -94,7 +96,8 @@ public class ServerGUI {
                         Socket socketClient = socketServer.accept();
                         registra("[DEBUG] Nuova connessione client accettata: " + socketClient.getRemoteSocketAddress());
                         new Thread(() -> gestisciClient(socketClient)).start();
-                    } catch (IOException e) {
+                    }
+                    catch (IOException e) {
                         registra("Errore nell'accettazione del client: " + e.getMessage());
                     }
                 }
@@ -118,7 +121,8 @@ public class ServerGUI {
             registra("[DEBUG] Server socket chiuso.");
             bottoneAvvio.setEnabled(true);
             bottoneFermo.setEnabled(false);
-        } catch (IOException e) {
+        }
+        catch (IOException e) {
             registra("Errore nella fermata del server: " + e.getMessage());
         }
     }
@@ -128,29 +132,25 @@ public class ServerGUI {
         try (
                 BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                 PrintWriter out = new PrintWriter(socket.getOutputStream(), true)
-        )
-        {
+        ) {
             registra("Client connesso: " + socket.getRemoteSocketAddress());
+            out.println("Inserisci il tuo nome utente:");
+            out.println("(O digita 'registra' per creare un nuovo account)");
+
+            BufferedReader lettoreFileUtente = new BufferedReader(new FileReader("utenti.txt"));
+            Map<String, String> credenziali = new ConcurrentHashMap<>();
+            String linea;
+            while ((linea = lettoreFileUtente.readLine()) != null) {
+                String[] parti = linea.split(":");
+                if (parti.length == 2) {
+                    credenziali.put(parti[0], parti[1]);
+                }
+            }
+            lettoreFileUtente.close();
 
             while (true) {
                 nomeUtente = in.readLine();
-                if (nomeUtente == null) {
-                    throw new IOException("Client disconnesso durante la lettura del nome utente.");
-                }
-                nomeUtente = nomeUtente.trim();
-
-                if (nomeUtente.equalsIgnoreCase("registra")) {
-                    // Implementazione per la registrazione di un nuovo utente
-                    out.println("Inserisci un nuovo nome utente:");
-                    nomeUtente = in.readLine();
-                    if (nomeUtente == null || nomeUtente.trim().isEmpty()) {
-                        out.println("Nome utente non valido. Disconnessione.");
-                        return;
-                    }
-                    // Controlla se l'utente esiste già, salva nel file, ecc.
-                }
-
-                if (nomeUtente.isEmpty()) {
+                if (nomeUtente == null || nomeUtente.trim().isEmpty()) {
                     out.println("Il nome utente non può essere vuoto. Inserisci un altro:");
                 }
                 else if (utentiConnessi.containsKey(nomeUtente)) {
@@ -162,7 +162,6 @@ public class ServerGUI {
                         registra("[DEBUG] Utente aggiunto: " + nomeUtente);
                         modelloListaUtentiAttivi.addElement(nomeUtente + " (" + socket.getRemoteSocketAddress() + ")");
                         modelloListaUtentiDisconnessi.removeElement(nomeUtente); // Rimuove dalla lista disconnessi
-                        trasmettiListaUtenti();
                     }
                     trasmetti("[Server]: " + nomeUtente + " si è unito alla chat.");
                     break;
@@ -171,48 +170,25 @@ public class ServerGUI {
 
             String messaggio;
             while ((messaggio = in.readLine()) != null) {
-                if (messaggio.startsWith("FILE:")) {
-                    riceviFile(messaggio.substring(5), socket);
-                } else if (messaggio.length() > 200) {
+                if (messaggio.length() > 200) {
                     out.println("Messaggio troppo lungo (max 200 caratteri).");
-                } else {
-                    String voceLog = nomeUtente + ": " + messaggio;
-                    trasmetti(voceLog);
+                    continue;
                 }
+                String voceLog = nomeUtente + ": " + messaggio;
+                trasmetti(voceLog);
             }
-        } catch (IOException e) {
+        }
+        catch (IOException e) {
             registra("Client disconnesso inaspettatamente.");
         }
         finally {
-            if (nomeUtente != null) {
-                synchronized (utentiConnessi) {
-                    utentiConnessi.remove(nomeUtente);
-                    registra("[DEBUG] Utente rimosso: " + nomeUtente);
-                    modelloListaUtentiAttivi.removeElement(nomeUtente + " (" + socket.getRemoteSocketAddress() + ")");
-                    modelloListaUtentiDisconnessi.addElement(nomeUtente + " (" + socket.getRemoteSocketAddress() + ")");
-                    trasmetti("[Server]: " + nomeUtente + " ha lasciato la chat.");
-                    trasmettiListaUtenti();
-                }
+            synchronized (utentiConnessi) {
+                utentiConnessi.remove(nomeUtente);
+                registra("[DEBUG] Utente rimosso: " + nomeUtente);
+                modelloListaUtentiAttivi.removeElement(nomeUtente + " (" + socket.getRemoteSocketAddress() + ")");
+                modelloListaUtentiDisconnessi.addElement(nomeUtente + " (" + socket.getRemoteSocketAddress() + ")");
+                trasmetti("[Server]: " + nomeUtente + " ha lasciato la chat.");
             }
-        }
-    }
-
-    private void riceviFile(String nomeFile, Socket socket) {
-        try (BufferedOutputStream outFile = new BufferedOutputStream(new FileOutputStream(nomeFile));
-             InputStream inSocket = socket.getInputStream()) {
-
-            byte[] buffer = new byte[4096];
-            int bytesRead;
-            while ((bytesRead = inSocket.read(buffer)) != -1) {
-                outFile.write(buffer, 0, bytesRead);
-                if (bytesRead == 0) { // Se read restituisce 0, potrebbe essere la fine del file
-                    break;
-                }
-            }
-            outFile.flush();
-            registra("File ricevuto: " + nomeFile);
-        } catch (IOException e) {
-            registra("Errore nella ricezione del file: " + e.getMessage());
         }
     }
 

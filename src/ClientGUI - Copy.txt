@@ -75,12 +75,14 @@ public class ClientGUI {
         pannelloSuperiore.add(bottoneDisconnetti);
         pannelloSuperiore.add(bottoneInviaFile);
 
+        // Aggiunge una nuova colonna per gli utenti connessi
         modelloListaUtenti = new DefaultListModel<>();
         JList<String> listaUtenti = new JList<>(modelloListaUtenti);
         listaUtenti.setFixedCellWidth(150);
         JScrollPane scrollPaneUtenti = new JScrollPane(listaUtenti);
         scrollPaneUtenti.setBorder(BorderFactory.createTitledBorder("Utenti Connessi"));
 
+        // Usa un BorderLayout per posizionare la lista utenti a destra
         finestra.setLayout(new BorderLayout());
         finestra.add(pannelloSuperiore, BorderLayout.NORTH);
         finestra.add(scrollPaneChat, BorderLayout.CENTER);
@@ -116,7 +118,8 @@ public class ClientGUI {
 
             campoHost.setEnabled(false);
             campoPorta.setEnabled(false);
-        } catch (IOException | NumberFormatException e) {
+        }
+        catch (IOException | NumberFormatException e) {
             JOptionPane.showMessageDialog(finestra, "Impossibile connettersi al server: " + e.getMessage(), "Errore di Connessione", JOptionPane.ERROR_MESSAGE);
         }
     }
@@ -136,7 +139,8 @@ public class ClientGUI {
 
             out.println(messaggio);
             campoMessaggio.setText("");
-        } catch (Exception e) {
+        }
+        catch (Exception e) {
             JOptionPane.showMessageDialog(finestra, "Errore nell'invio del messaggio: " + e.getMessage(), "Errore", JOptionPane.ERROR_MESSAGE);
         }
     }
@@ -148,14 +152,18 @@ public class ClientGUI {
             File file = selettoreFile.getSelectedFile();
             try (BufferedInputStream inFile = new BufferedInputStream(new FileInputStream(file));
                  OutputStream outSocket = socket.getOutputStream()) {
-                out.println("FILE:" + file.getName()); // Segnalazione dell'arrivo di un file
+
+                out.println("FILE:" + file.getName()); // Invia intestazione file
+
                 byte[] buffer = new byte[4096];
                 int bytesRead;
                 while ((bytesRead = inFile.read(buffer)) != -1) {
                     outSocket.write(buffer, 0, bytesRead);
                 }
                 outSocket.flush();
-            } catch (IOException e) {
+                areaChat.append("File inviato: " + file.getName() + "\n");
+            }
+            catch (IOException e) {
                 JOptionPane.showMessageDialog(finestra, "Errore nell'invio del file: " + e.getMessage(), "Errore", JOptionPane.ERROR_MESSAGE);
             }
         }
@@ -167,13 +175,16 @@ public class ClientGUI {
             while ((messaggio = in.readLine()) != null) {
                 if (messaggio.startsWith("FILE:")) {
                     riceviFile(messaggio.substring(5));
-                } else if (messaggio.startsWith("[Server]: Utenti connessi:")) {
+                }
+                else if (messaggio.startsWith("[Server]: Utenti connessi:")) {
                     aggiornaListaUtenti(messaggio);
-                } else {
+                }
+                else {
                     areaChat.append(messaggio + "\n");
                 }
             }
-        } catch (IOException e) {
+        }
+        catch (IOException e) {
             JOptionPane.showMessageDialog(finestra, "Connessione persa.", "Errore", JOptionPane.ERROR_MESSAGE);
             disconnettiDalServer();
         }
@@ -190,7 +201,8 @@ public class ClientGUI {
             }
             outFile.flush();
             areaChat.append("File ricevuto: " + nomeFile + "\n");
-        } catch (IOException e) {
+        }
+        catch (IOException e) {
             JOptionPane.showMessageDialog(finestra, "Errore nella ricezione del file: " + e.getMessage(), "Errore", JOptionPane.ERROR_MESSAGE);
         }
     }
