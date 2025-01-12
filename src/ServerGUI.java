@@ -70,7 +70,7 @@ public class ServerGUI {
         finestra.add(pannelloSuperiore, BorderLayout.NORTH);
         finestra.add(scrollPaneLog, BorderLayout.CENTER);
         finestra.add(pannelloUtenti, BorderLayout.SOUTH);
-
+//dwa
         finestra.setVisible(true);
     }
 
