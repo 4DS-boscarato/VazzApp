@@ -144,22 +144,41 @@ public class ClientGUI {
     private void inviaFile() {
         JFileChooser selettoreFile = new JFileChooser();
         int returnValue = selettoreFile.showOpenDialog(finestra);
+
         if (returnValue == JFileChooser.APPROVE_OPTION) {
             File file = selettoreFile.getSelectedFile();
-            try (BufferedInputStream inFile = new BufferedInputStream(new FileInputStream(file));
-                 OutputStream outSocket = socket.getOutputStream()) {
-                out.println("FILE:" + file.getName()); // Segnalazione dell'arrivo di un file
+
+            if (!file.exists() || !file.isFile()) {
+                JOptionPane.showMessageDialog(finestra, "File non valido selezionato.", "Errore", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            try (Socket fileSocket = new Socket(socket.getInetAddress(), 7778); // Porta separata per file
+                 BufferedInputStream inFile = new BufferedInputStream(new FileInputStream(file));
+                 DataOutputStream outFileSocket = new DataOutputStream(fileSocket.getOutputStream())) {
+
+                // Notifica al server che un file è in arrivo
+                out.println("FILE:" + file.getName());
+
+                // Invia nome e dimensione del file
+                outFileSocket.writeUTF(file.getName());
+                outFileSocket.writeLong(file.length());
+
+                // Invia il contenuto del file
                 byte[] buffer = new byte[4096];
                 int bytesRead;
                 while ((bytesRead = inFile.read(buffer)) != -1) {
-                    outSocket.write(buffer, 0, bytesRead);
+                    outFileSocket.write(buffer, 0, bytesRead);
                 }
-                outSocket.flush();
+                outFileSocket.flush();
+
+                JOptionPane.showMessageDialog(finestra, "File inviato correttamente: " + file.getName(), "Successo", JOptionPane.INFORMATION_MESSAGE);
             } catch (IOException e) {
                 JOptionPane.showMessageDialog(finestra, "Errore nell'invio del file: " + e.getMessage(), "Errore", JOptionPane.ERROR_MESSAGE);
             }
         }
     }
+
 
     private void ascoltaMessaggi() {
         try {

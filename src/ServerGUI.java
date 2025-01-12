@@ -18,6 +18,7 @@ public class ServerGUI {
     private JButton bottoneFermo;
     private JTextField campoPorta;
     private ServerSocket socketServer;
+    private ServerSocket socketFileServer;
     private boolean inEsecuzione = false;
     private final Map<String, PrintWriter> utentiConnessi = new ConcurrentHashMap<>();
 
@@ -27,6 +28,7 @@ public class ServerGUI {
 
     public ServerGUI() {
         inizializzaGUI();
+        preparaCartellaFile();
     }
 
     private void inizializzaGUI() {
@@ -70,9 +72,21 @@ public class ServerGUI {
         finestra.add(pannelloSuperiore, BorderLayout.NORTH);
         finestra.add(scrollPaneLog, BorderLayout.CENTER);
         finestra.add(pannelloUtenti, BorderLayout.SOUTH);
-//dwa
+
         finestra.setVisible(true);
     }
+
+    private void avviaSocketFile(int portaFile) {
+        try {
+            socketFileServer = new ServerSocket(portaFile);
+            registra("Socket file avviato sulla porta " + portaFile);
+            new Thread(this::gestisciConnessioniFile).start();
+        } catch (IOException e) {
+            registra("Errore nell'avvio del socket file sulla porta " + portaFile + ": " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
 
     private void avviaServer() {
         try {
@@ -82,31 +96,21 @@ public class ServerGUI {
             }
 
             socketServer = new ServerSocket(porta);
-            registra("[DEBUG] ServerSocket creato e in ascolto sulla porta " + porta);
             inEsecuzione = true;
             registra("Server avviato sulla porta " + porta);
+
+            // Avvia il socket per i file sulla porta successiva
+            avviaSocketFile(porta + 1);
+
             bottoneAvvio.setEnabled(false);
             bottoneFermo.setEnabled(true);
 
-            new Thread(() -> {
-                while (inEsecuzione) {
-                    try {
-                        Socket socketClient = socketServer.accept();
-                        registra("[DEBUG] Nuova connessione client accettata: " + socketClient.getRemoteSocketAddress());
-                        new Thread(() -> gestisciClient(socketClient)).start();
-                    } catch (IOException e) {
-                        registra("Errore nell'accettazione del client: " + e.getMessage());
-                    }
-                }
-            }).start();
-        } catch (NumberFormatException e) {
-            registra("Numero di porta non valido.");
-        } catch (IllegalArgumentException e) {
-            registra(e.getMessage());
-        } catch (IOException e) {
+            new Thread(this::gestisciConnessioniClient).start();
+        } catch (Exception e) {
             registra("Errore nell'avvio del server: " + e.getMessage());
         }
     }
+
 
     private void fermaServer() {
         try {
@@ -114,12 +118,36 @@ public class ServerGUI {
             if (socketServer != null && !socketServer.isClosed()) {
                 socketServer.close();
             }
+            if (socketFileServer != null && !socketFileServer.isClosed()) {
+                socketFileServer.close();
+            }
             registra("Server fermato.");
-            registra("[DEBUG] Server socket chiuso.");
             bottoneAvvio.setEnabled(true);
             bottoneFermo.setEnabled(false);
         } catch (IOException e) {
             registra("Errore nella fermata del server: " + e.getMessage());
+        }
+    }
+
+    private void gestisciConnessioniClient() {
+        while (inEsecuzione) {
+            try {
+                Socket socketClient = socketServer.accept();
+                new Thread(() -> gestisciClient(socketClient)).start();
+            } catch (IOException e) {
+                registra("Errore nell'accettazione del client: " + e.getMessage());
+            }
+        }
+    }
+
+    private void gestisciConnessioniFile() {
+        while (inEsecuzione) {
+            try {
+                Socket socketFile = socketFileServer.accept();
+                new Thread(() -> riceviFile(socketFile)).start();
+            } catch (IOException e) {
+                registra("Errore nel socket file: " + e.getMessage());
+            }
         }
     }
 
@@ -128,89 +156,54 @@ public class ServerGUI {
         try (
                 BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                 PrintWriter out = new PrintWriter(socket.getOutputStream(), true)
-        )
-        {
-            registra("Client connesso: " + socket.getRemoteSocketAddress());
-
-            while (true) {
-                nomeUtente = in.readLine();
-                if (nomeUtente == null) {
-                    throw new IOException("Client disconnesso durante la lettura del nome utente.");
-                }
-                nomeUtente = nomeUtente.trim();
-
-                if (nomeUtente.equalsIgnoreCase("registra")) {
-                    // Implementazione per la registrazione di un nuovo utente
-                    out.println("Inserisci un nuovo nome utente:");
-                    nomeUtente = in.readLine();
-                    if (nomeUtente == null || nomeUtente.trim().isEmpty()) {
-                        out.println("Nome utente non valido. Disconnessione.");
-                        return;
-                    }
-                    // Controlla se l'utente esiste già, salva nel file, ecc.
-                }
-
-                if (nomeUtente.isEmpty()) {
-                    out.println("Il nome utente non può essere vuoto. Inserisci un altro:");
-                }
-                else if (utentiConnessi.containsKey(nomeUtente)) {
+        ) {
+            out.println("Benvenuto! Inserisci il tuo nome utente:");
+            while ((nomeUtente = in.readLine()) != null) {
+                if (utentiConnessi.containsKey(nomeUtente)) {
                     out.println("Nome utente già in uso. Inserisci un altro:");
-                }
-                else {
-                    synchronized (utentiConnessi) {
-                        utentiConnessi.put(nomeUtente, out);
-                        registra("[DEBUG] Utente aggiunto: " + nomeUtente);
-                        modelloListaUtentiAttivi.addElement(nomeUtente + " (" + socket.getRemoteSocketAddress() + ")");
-                        modelloListaUtentiDisconnessi.removeElement(nomeUtente); // Rimuove dalla lista disconnessi
-                        trasmettiListaUtenti();
-                    }
+                } else {
+                    utentiConnessi.put(nomeUtente, out);
+                    modelloListaUtentiAttivi.addElement(nomeUtente);
                     trasmetti("[Server]: " + nomeUtente + " si è unito alla chat.");
+                    trasmettiListaUtenti();
                     break;
                 }
             }
 
             String messaggio;
             while ((messaggio = in.readLine()) != null) {
-                if (messaggio.startsWith("FILE:")) {
-                    riceviFile(messaggio.substring(5), socket);
-                } else if (messaggio.length() > 200) {
-                    out.println("Messaggio troppo lungo (max 200 caratteri).");
-                } else {
-                    String voceLog = nomeUtente + ": " + messaggio;
-                    trasmetti(voceLog);
-                }
+                trasmetti(nomeUtente + ": " + messaggio);
             }
         } catch (IOException e) {
-            registra("Client disconnesso inaspettatamente.");
-        }
-        finally {
+            registra("Errore con il client: " + e.getMessage());
+        } finally {
             if (nomeUtente != null) {
-                synchronized (utentiConnessi) {
-                    utentiConnessi.remove(nomeUtente);
-                    registra("[DEBUG] Utente rimosso: " + nomeUtente);
-                    modelloListaUtentiAttivi.removeElement(nomeUtente + " (" + socket.getRemoteSocketAddress() + ")");
-                    modelloListaUtentiDisconnessi.addElement(nomeUtente + " (" + socket.getRemoteSocketAddress() + ")");
-                    trasmetti("[Server]: " + nomeUtente + " ha lasciato la chat.");
-                    trasmettiListaUtenti();
-                }
+                utentiConnessi.remove(nomeUtente);
+                modelloListaUtentiAttivi.removeElement(nomeUtente);
+                modelloListaUtentiDisconnessi.addElement(nomeUtente);
+                trasmetti("[Server]: " + nomeUtente + " ha lasciato la chat.");
+                trasmettiListaUtenti();
             }
         }
     }
 
-    private void riceviFile(String nomeFile, Socket socket) {
-        try (BufferedOutputStream outFile = new BufferedOutputStream(new FileOutputStream(nomeFile));
-             InputStream inSocket = socket.getInputStream()) {
-
+    private void riceviFile(Socket socket) {
+        try (
+                DataInputStream in = new DataInputStream(socket.getInputStream());
+                FileOutputStream outFile = new FileOutputStream("files/" + in.readUTF())
+        ) {
+            long fileSize = in.readLong();
             byte[] buffer = new byte[4096];
-            int bytesRead;
-            while ((bytesRead = inSocket.read(buffer)) != -1) {
-                outFile.write(buffer, 0, bytesRead);
-                if (bytesRead == 0) { // Se read restituisce 0, potrebbe essere la fine del file
-                    break;
-                }
+            long bytesRead = 0;
+
+            while (bytesRead < fileSize) {
+                int read = in.read(buffer);
+                if (read == -1) break;
+                outFile.write(buffer, 0, read);
+                bytesRead += read;
             }
-            outFile.flush();
-            registra("File ricevuto: " + nomeFile);
+
+            registra("File ricevuto correttamente.");
         } catch (IOException e) {
             registra("Errore nella ricezione del file: " + e.getMessage());
         }
@@ -219,18 +212,23 @@ public class ServerGUI {
     private void trasmetti(String messaggio) {
         synchronized (utentiConnessi) {
             registra(messaggio);
-            for (PrintWriter writer : utentiConnessi.values()) {
-                writer.println(messaggio);
-            }
+            utentiConnessi.values().forEach(out -> out.println(messaggio));
         }
+    }
+
+    private void trasmettiListaUtenti() {
+        String lista = utentiConnessi.keySet().stream().collect(Collectors.joining(", "));
+        trasmetti("[Server]: Utenti connessi: " + lista);
     }
 
     private void registra(String messaggio) {
         SwingUtilities.invokeLater(() -> areaLog.append(messaggio + "\n"));
     }
 
-    private void trasmettiListaUtenti() {
-        String listaUtenti = utentiConnessi.keySet().stream().collect(Collectors.joining(", "));
-        trasmetti("[Server]: Utenti connessi: " + listaUtenti);
+    private void preparaCartellaFile() {
+        File directory = new File("files");
+        if (!directory.exists() && directory.mkdir()) {
+            registra("Cartella 'files' creata per i file ricevuti.");
+        }
     }
 }
